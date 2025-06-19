@@ -27,12 +27,18 @@ class LinearModel:
         # these are all default values
         # there are functions to set these to specific values
         self.goal_state = [0.0] * state.size1()
+        self.goal_u = [0.0] * u.size1()
         self.Q = np.eye(state.size1())        
         self.R = np.eye(u.size1())       
+
+        # the model can estimate the state in multiple ways
+        # the default will be to use the A and B matrices 
+        self.est_method = 'linear'
 
         # data structures for a Kalman Filter are
         # set to None.  They can be set with the 
         # setupKalmanFilter function if a filter is needed
+        self.goal_u_kf = None
         self.C = None
         self.D = None
         self.Q_kf = None
@@ -125,13 +131,43 @@ class LinearModel:
         self.C_kf = np.eye(self.state.size1())
         self.D_kf = np.zeros_like(self.B_kf)
 
-    def get_next_state(self, x0, u0, dt):
+        print(self.goal_u)
+        print(self.goal_state)
+        self.goal_u_kf = np.concatenate((self.goal_u, self.C@self.goal_state), axis=0)
+
+    # The next functions for getting the state are for actual
+    # working implementations. They hopefully are fast
+    def get_next_state_linear(self, x0, u0, dt):
+        dx = self.A@(x0 - self.goal_state) + self.B@(u0 - self.goal_u)
+        return x0 + dx*dt
+    
+    def get_next_state_kf(self, x0, u0, dt):
+        dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u0 - self.goal_u)
+        return x0 + dx*dt
+    
+    def get_next_state_nonlinear(self, x0, u0, dt):
         dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
         return x0 + dx*dt
 
+    def get_next_state_kf(self, x0, u0, dt):
+        dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u0 - self.goal_u_kf)
+        return x0 + dx*dt
+
+
+    
+    # this gets the state for the simulator. Wouldn't want this 
+    # big switch statement in actual bot code.
+    def get_next_state_simulator(self, x0, u0, dt):
+        dx = None
+        if self.est_method == 'linear':
+            dx = self.A@(x0 - self.goal_state) + self.B@(u0 - self.goal_u)
+        elif self.est_method == 'kf':
+            u = np.concatenate((u0, self.C@x0), axis=0)
+            dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u - self.goal_u_kf)
+        else:
+            dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
+        return x0 + dx*dt
+
+
     def get_control_input(self, x0):
         return -self.K@(x0 - self.goal_state)
-
-
-
-
