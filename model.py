@@ -114,16 +114,22 @@ class LQRModel:
 
 
 class LQGModel(LQRModel):
-    def __init__(self, lqrm, C, Q_kf, R_kf):
+    def __init__(self, lqrm, C, Q_kf, R_kf, name=''):
+        
+        model_name = name
+        if model_name == '':
+            model_name = lqrm.name
+    
         super().__init__(lqrm.state, 
                          lqrm.rhs, 
                          lqrm.u, 
                          lqrm.constants, 
                          lqrm.constant_values, 
                          lqrm.dt,
-                         lqrm.name,
+                         model_name,
                          lqrm.state_names)
-        
+
+
         self.goal_state = lqrm.goal_state
         self.goal_u = lqrm.goal_u
         self.Q = lqrm.Q
@@ -174,8 +180,13 @@ class LQGModel(LQRModel):
     
 
 class LQRDiscreteModel():
-    def __init__(self, lqm):
+    def __init__(self, lqm, name=''):
         self.lqm = lqm
+        self.dt = lqm.dt
+        self.name = name
+        if name == '':
+            self.name = lqm.name
+
         sys_c = ss(lqm.A, lqm.B, np.eye(4), np.zeros_like(lqm.B))
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
@@ -199,15 +210,18 @@ class LQRDiscreteModel():
         return -self.K_d@(x0 - self.lqm.goal_state)
 
     def get_name(self):
-        return self.lqm.name
+        return self.name
     
     def get_state_names(self):
         return self.lqm.state_names
     
 class LQGDiscreteModel():
-    def __init__(self, lqm):
+    def __init__(self, lqm, name=''):
         self.lqm = lqm
         self.dt = lqm.dt
+        self.name = name
+        if name == '':
+            self.name = lqm.name
         sys_c = ss(lqm.A_kf, lqm.B_kf, lqm.C_kf, lqm.D_kf)
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
@@ -235,7 +249,7 @@ class LQGDiscreteModel():
         return -self.lqm.K@(x0 - self.lqm.goal_state)
     
     def get_name(self):
-        return self.lqm.name
+        return self.name
     
     def get_state_names(self):
         return self.lqm.state_names

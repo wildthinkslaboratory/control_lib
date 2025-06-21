@@ -134,3 +134,5 @@ class NoisySimulator:
                 plt.title(self.model.name)
                 # plt.savefig("documents/KFangular_velocity.pdf", format="pdf", bbox_inches="tight")
                 plt.show()
+
+
