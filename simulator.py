@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 from time import perf_counter
 
 class Simulator:
-    def __init__(self, model, x0, u0, timespan, dt):
+    def __init__(self, model, x0, u0, timespan):
         self.model = model
         self.x0 = x0
         self.u0 = u0
-        self.dt = dt
-        self.tspan = np.arange(0,timespan,dt)
+        self.dt = self.model.dt
+        self.tspan = np.arange(0,timespan, self.dt)
         self.data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
         self.input_bound = np.array([])
 

@@ -90,7 +90,8 @@ class LQRModel:
         # print system eigenvalues
         sys_matrix = self.A - self.B @ self.K
         eigenvalues, eigenvectors = np.linalg.eig(sys_matrix)
-        print('eigenvalues of A-BK: \n', eigenvalues)
+        print('Eigenvalues for A-BK matrix of', self.name, 'system')
+        print(eigenvalues)
         recommended_dt = abs(0.5 / min(eigenvalues))
         print(recommended_dt, 'ms is the maximum recommended dt for a Forward Euler integrator')
 
@@ -167,6 +168,7 @@ class LQGModel(LQRModel):
         self.D_kf = np.zeros_like(self.B_kf)
 
         self.goal_u_kf = np.concatenate((self.goal_u, self.C@self.goal_state), axis=0)
+
 
         
     def get_next_state(self, x0, u0):
