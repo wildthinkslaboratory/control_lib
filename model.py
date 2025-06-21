@@ -207,6 +207,7 @@ class LQRDiscreteModel():
 class LQGDiscreteModel():
     def __init__(self, lqm):
         self.lqm = lqm
+        self.dt = lqm.dt
         sys_c = ss(lqm.A_kf, lqm.B_kf, lqm.C_kf, lqm.D_kf)
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
