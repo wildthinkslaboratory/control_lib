@@ -192,13 +192,16 @@ class LQRDiscreteModel():
         sys_c = ss(lqm.A, lqm.B, np.eye(4), np.zeros_like(lqm.B))
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
-        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, lqm.R)
+        R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
+        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
+
+        self.adj_input_size = self.lqm.input_size() + self.C.shape[0]
 
     def state_size(self):
         return self.lqm.state_size()
     
     def input_size(self):
-        return self.lqm.input_size()
+        return self.adj_input_size
     
     def get_next_state(self, x0, u0):
         xr = self.lqm.goal_state
@@ -230,11 +233,13 @@ class LQGDiscreteModel():
         R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
         self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
 
+        self.adj_input_size = self.lqm.input_size() + self.lqm.C.shape[0]
+    
     def state_size(self):
         return self.lqm.state_size()
     
     def input_size(self):
-        return self.lqm.input_size()
+        return self.adj_input_size
     
     def get_next_state(self, x0, u0):
         xr = self.lqm.goal_state
@@ -242,13 +247,10 @@ class LQGDiscreteModel():
         return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr
     
     def get_next_state_simulator(self, x0, u0, dt):
-        u = np.concatenate((u0, self.lqm.C@x0), axis=0)
-        return self.get_next_state(x0,u)
+        return self.get_next_state(x0,u0)
 
-    # def get_control_input(self, x0):
-    #     return -self.K_d@(x0 - self.lqm.goal_state)
     def get_control_input(self, x0):
-        return -self.lqm.K@(x0 - self.lqm.goal_state)
+        return -self.K_d@(x0 - self.lqm.goal_state)
     
     def get_name(self):
         return self.name

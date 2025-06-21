@@ -55,10 +55,11 @@ class Simulator:
             #axs[i+ns].set_ylabel(self.model.u[i].name())
 
             if self.input_bound.any():
-                upper = np.full((len(self.tspan),), self.input_bound[i][0])
-                lower = np.full((len(self.tspan),), self.input_bound[i][1])
-                axs[i+ns].plot(self.tspan,upper,linewidth=1)
-                axs[i+ns].plot(self.tspan,lower,linewidth=1)
+                if self.input_bound[i].any():
+                    upper = np.full((len(self.tspan),), self.input_bound[i][0])
+                    lower = np.full((len(self.tspan),), self.input_bound[i][1])
+                    axs[i+ns].plot(self.tspan,upper,linewidth=1)
+                    axs[i+ns].plot(self.tspan,lower,linewidth=1)
                 
         plt.xlabel('Time')
         plt.show()
