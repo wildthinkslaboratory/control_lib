@@ -10,7 +10,12 @@ class Simulator:
         self.dt = dt
         self.tspan = np.arange(0,timespan,dt)
         self.data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
-    
+        self.input_bound = np.array([])
+
+    def add_intput_bound(self, bound):
+        assert len(bound) == len(self.u0)
+        self.input_bound = bound
+
     def run(self):
         x = self.x0
         u = self.u0
@@ -48,6 +53,13 @@ class Simulator:
         for i in range(nu):
             axs[i+ns].plot(self.tspan,self.data[:,i+ns],linewidth=2)
             #axs[i+ns].set_ylabel(self.model.u[i].name())
+
+            if self.input_bound.any():
+                upper = np.full((len(self.tspan),), self.input_bound[i][0])
+                lower = np.full((len(self.tspan),), self.input_bound[i][1])
+                axs[i+ns].plot(self.tspan,upper,linewidth=1)
+                axs[i+ns].plot(self.tspan,lower,linewidth=1)
+                
         plt.xlabel('Time')
         plt.show()
 

@@ -211,7 +211,7 @@ class LQGDiscreteModel():
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
         R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
-        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.eye(4))
+        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
 
     def state_size(self):
         return self.lqm.state_size()
