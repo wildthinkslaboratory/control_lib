@@ -1,24 +1,31 @@
 import casadi as ca
 import numpy as np
-from control.matlab import lqr, ctrb, obsv
+from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr
 
 
 
-class LinearModel:
+class LQRModel:
     def __init__(self, 
                  state, 
                  right_hand_side, 
                  u, 
                  constants, 
                  constant_values, 
-                 name='unamed model',
-                 state_names=''):
+                 dt,
+                 name,
+                 state_names):
 
         # these are all our casadi variables and symbols
         self.state = state
+        self.rhs = right_hand_side
         self.u = u
         self.constants = constants
+
+        assert constants.size1() == len(constant_values)
+        self.constant_values = constant_values
+        self.dt = dt
         self.name = name
+
         if state_names == '':
             self.state_names = [s.name() for s in ca.vertsplit(state)]
         else:
@@ -30,26 +37,6 @@ class LinearModel:
         self.goal_u = [0.0] * u.size1()
         self.Q = np.eye(state.size1())        
         self.R = np.eye(u.size1())       
-
-        # the model can estimate the state in multiple ways
-        # the default will be to use the A and B matrices 
-        self.est_method = 'linear'
-
-        # data structures for a Kalman Filter are
-        # set to None.  They can be set with the 
-        # setupKalmanFilter function if a filter is needed
-        self.goal_u_kf = None
-        self.C = None
-        self.D = None
-        self.Q_kf = None
-        self.R_kf = None
-        self.A_kf = None
-        self.B_kf = None
-        self.C_kf = None
-        self.D_kf = None
-
-        assert constants.size1() == len(constant_values)
-        self.constant_values = constant_values
 
         # make our casadi equation 
         self.f = ca.Function('f', [state, u, constants], [right_hand_side], ['state', 'u', 'constants'], ['dx'])
@@ -73,6 +60,11 @@ class LinearModel:
     def input_size(self):
         return self.u.size1()
     
+    def get_name(self):
+        return self.name
+    
+    def get_state_names(self):
+        return self.state_names
     
     def set_up(self):
         # compute the jacobian of the system
@@ -93,19 +85,56 @@ class LinearModel:
             print('\nSystem is not controllable')
 
         # compute the input rule
-        self.K = lqr(self.A,self.B,self.Q,self.R)[0] 
+        self.K, S, E = lqr(self.A,self.B,self.Q,self.R) 
     
         # print system eigenvalues
         sys_matrix = self.A - self.B @ self.K
         eigenvalues, eigenvectors = np.linalg.eig(sys_matrix)
         print('eigenvalues of A-BK: \n', eigenvalues)
+        recommended_dt = abs(0.5 / min(eigenvalues))
+        print(recommended_dt, 'ms is the maximum recommended dt for a Forward Euler integrator')
 
 
-    def set_up_Kalman_Filter(self, C, Q_kf, R_kf):
+    # The next functions for getting the state are for actual
+    # working implementations. They hopefully are fast
+    def get_next_state(self, x0, u0):
+        dx = self.A@(x0 - self.goal_state) + self.B@(u0 - self.goal_u)
+        return x0 + dx*self.dt
+    
+    
+    def get_next_state_nonlinear(self, x0, u0):
+        dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
+        return x0 + dx*self.dt
 
+    def get_next_state_simulator(self, x0, u0, dt):
+        return self.get_next_state(x0, u0)
+
+    def get_control_input(self, x0):
+        return -self.K@(x0 - self.goal_state)
+
+
+class LQGModel(LQRModel):
+    def __init__(self, lqrm, C, Q_kf, R_kf):
+        super().__init__(lqrm.state, 
+                         lqrm.rhs, 
+                         lqrm.u, 
+                         lqrm.constants, 
+                         lqrm.constant_values, 
+                         lqrm.dt,
+                         lqrm.name,
+                         lqrm.state_names)
+        
+        self.goal_state = lqrm.goal_state
+        self.goal_u = lqrm.goal_u
+        self.Q = lqrm.Q
+        self.R = lqrm.R
+        self.f = lqrm.f
+        self.set_up()
+        
         # C is our measurement model
         self.C = C
         self.D = np.zeros_like(self.B)
+        self.goal_u_kf = np.concatenate((self.goal_u, self.C@self.goal_state), axis=0)
 
         # This is our state disturbance matrix
         assert self.A.shape == Q_kf.shape
@@ -131,43 +160,82 @@ class LinearModel:
         self.C_kf = np.eye(self.state.size1())
         self.D_kf = np.zeros_like(self.B_kf)
 
-        print(self.goal_u)
-        print(self.goal_state)
         self.goal_u_kf = np.concatenate((self.goal_u, self.C@self.goal_state), axis=0)
 
-    # The next functions for getting the state are for actual
-    # working implementations. They hopefully are fast
-    def get_next_state_linear(self, x0, u0, dt):
-        dx = self.A@(x0 - self.goal_state) + self.B@(u0 - self.goal_u)
-        return x0 + dx*dt
-    
-    def get_next_state_kf(self, x0, u0, dt):
-        dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u0 - self.goal_u)
-        return x0 + dx*dt
-    
-    def get_next_state_nonlinear(self, x0, u0, dt):
-        dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
-        return x0 + dx*dt
-
-    def get_next_state_kf(self, x0, u0, dt):
+        
+    def get_next_state(self, x0, u0):
         dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u0 - self.goal_u_kf)
-        return x0 + dx*dt
-
-
+        return x0 + dx*self.dt
     
-    # this gets the state for the simulator. Wouldn't want this 
-    # big switch statement in actual bot code.
     def get_next_state_simulator(self, x0, u0, dt):
-        dx = None
-        if self.est_method == 'linear':
-            dx = self.A@(x0 - self.goal_state) + self.B@(u0 - self.goal_u)
-        elif self.est_method == 'kf':
-            u = np.concatenate((u0, self.C@x0), axis=0)
-            dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u - self.goal_u_kf)
-        else:
-            dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
-        return x0 + dx*dt
+        u = np.concatenate((u0, self.C@x0), axis=0)
+        dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u - self.goal_u_kf)
+        return x0 + dx*self.dt
+    
 
+class LQRDiscreteModel():
+    def __init__(self, lqm):
+        self.lqm = lqm
+        sys_c = ss(lqm.A, lqm.B, np.eye(4), np.zeros_like(lqm.B))
+        self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
+
+        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, lqm.R)
+
+    def state_size(self):
+        return self.lqm.state_size()
+    
+    def input_size(self):
+        return self.lqm.input_size()
+    
+    def get_next_state(self, x0, u0):
+        xr = self.lqm.goal_state
+        ur = self.lqm.goal_u
+        return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr
+    
+    def get_next_state_simulator(self, x0, u0, dt):
+        return self.get_next_state(x0,u0)
 
     def get_control_input(self, x0):
-        return -self.K@(x0 - self.goal_state)
+        return -self.K_d@(x0 - self.lqm.goal_state)
+
+    def get_name(self):
+        return self.lqm.name
+    
+    def get_state_names(self):
+        return self.lqm.state_names
+    
+class LQGDiscreteModel():
+    def __init__(self, lqm):
+        self.lqm = lqm
+        sys_c = ss(lqm.A_kf, lqm.B_kf, lqm.C_kf, lqm.D_kf)
+        self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
+
+        R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
+        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.eye(4))
+
+    def state_size(self):
+        return self.lqm.state_size()
+    
+    def input_size(self):
+        return self.lqm.input_size()
+    
+    def get_next_state(self, x0, u0):
+        xr = self.lqm.goal_state
+        ur = self.lqm.goal_u_kf
+        return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr
+    
+    def get_next_state_simulator(self, x0, u0, dt):
+        u = np.concatenate((u0, self.lqm.C@x0), axis=0)
+        return self.get_next_state(x0,u)
+
+    # def get_control_input(self, x0):
+    #     return -self.K_d@(x0 - self.lqm.goal_state)
+    def get_control_input(self, x0):
+        return -self.lqm.K@(x0 - self.lqm.goal_state)
+    
+    def get_name(self):
+        return self.lqm.name
+    
+    def get_state_names(self):
+        return self.lqm.state_names
+    
