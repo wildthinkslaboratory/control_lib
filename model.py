@@ -189,19 +189,18 @@ class LQRDiscreteModel():
         if name == '':
             self.name = lqm.name
 
-        sys_c = ss(lqm.A, lqm.B, np.eye(4), np.zeros_like(lqm.B))
+        sys_c = ss(lqm.A, lqm.B, np.eye(lqm.state_size()), np.zeros_like(lqm.B))
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
-        R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
-        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
+        self.K_d, S, E = dlqr(self.sys_d, lqm.Q, lqm.R)
 
-        self.adj_input_size = self.lqm.input_size() + self.C.shape[0]
+        # self.adj_input_size = self.lqm.input_size() + self.lqm.C.shape[0]
 
     def state_size(self):
         return self.lqm.state_size()
     
     def input_size(self):
-        return self.adj_input_size
+        return self.lqm.input_size()
     
     def get_next_state(self, x0, u0):
         xr = self.lqm.goal_state
