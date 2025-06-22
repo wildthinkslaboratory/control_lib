@@ -261,3 +261,5 @@ class LQGDiscreteModel():
     def get_state_names(self):
         return self.lqm.state_names
     
+    def get_goal_state(self):
+        return self.lqm.goal_state
