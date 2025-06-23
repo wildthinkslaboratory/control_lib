@@ -22,7 +22,7 @@ class Simulator:
         y = self.x0 # full state
         start_time = perf_counter()
         for i in range(len(self.tspan)):
-            x = self.model.get_next_state_simulator(x,u,y)
+            x = self.model.get_next_state(x,u,y)
             u = self.model.get_control_input(x)
             y = x # assume perfect sensors
             self.data[i] =  np.append(x, u)
