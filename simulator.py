@@ -19,10 +19,12 @@ class Simulator:
     def run(self):
         x = self.x0
         u = self.u0
+        y = self.x0 # full state
         start_time = perf_counter()
         for i in range(len(self.tspan)):
-            x = self.model.get_next_state_simulator(x,u,self.dt)
+            x = self.model.get_next_state_simulator(x,u,y)
             u = self.model.get_control_input(x)
+            y = x # assume perfect sensors
             self.data[i] =  np.append(x, u)
         print('Time for {} iterations of {} is {}'.format(len(self.tspan), self.model.get_name(), perf_counter() - start_time))
 
@@ -67,18 +69,18 @@ class Simulator:
 
 
 class NoisySimulator:
-    def __init__(self, model, x0, u0, timespan, dt):
+    def __init__(self, model, x0, u0, timespan):
         self.model = model
         self.x0 = x0
         self.u0 = u0
-        self.dt = dt
-        self.tspan = np.arange(0,timespan,dt)
+        self.dt = model.dt
+        self.tspan = np.arange(0,timespan,self.dt)
         self.true_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
         self.noisy_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
         self.kf_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
     
         # set the default noise
-        self.noise = np.full((self.model.C.shape[0], ), 0.0000026)
+        self.noise = np.array([0.07, 0.0225])
 
     def run(self):
         num_measurements = self.model.C.shape[0]
@@ -135,5 +137,8 @@ class NoisySimulator:
                 plt.title(self.model.name)
                 # plt.savefig("documents/KFangular_velocity.pdf", format="pdf", bbox_inches="tight")
                 plt.show()
+
+
+
 
 

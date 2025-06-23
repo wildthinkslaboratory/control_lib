@@ -1,6 +1,6 @@
 import casadi as ca
 import numpy as np
-from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr
+from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr, dlqe
 
 
 
@@ -107,7 +107,7 @@ class LQRModel:
         dx = self.f(state=x0, u=u0, constants=self.constant_values)['dx']
         return x0 + dx*self.dt
 
-    def get_next_state_simulator(self, x0, u0, dt):
+    def get_next_state_simulator(self, x0, u0, y):
         return self.get_next_state(x0, u0)
 
     def get_control_input(self, x0):
@@ -175,7 +175,7 @@ class LQGModel(LQRModel):
         dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u0 - self.goal_u_kf)
         return x0 + dx*self.dt
     
-    def get_next_state_simulator(self, x0, u0, dt):
+    def get_next_state_simulator(self, x0, u0):
         u = np.concatenate((u0, self.C@x0), axis=0)
         dx = self.A_kf@(x0 - self.goal_state) + self.B_kf@(u - self.goal_u_kf)
         return x0 + dx*self.dt
@@ -188,6 +188,7 @@ class LQRDiscreteModel():
         self.name = name
         if name == '':
             self.name = lqm.name
+        self.C = lqm.C
 
         sys_c = ss(lqm.A, lqm.B, np.eye(lqm.state_size()), np.zeros_like(lqm.B))
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
@@ -229,6 +230,8 @@ class LQGDiscreteModel():
         self.name = name
         if name == '':
             self.name = lqm.name
+
+        self.C = lqm.C
         sys_c = ss(lqm.A_kf, lqm.B_kf, lqm.C_kf, lqm.D_kf)
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
@@ -262,3 +265,54 @@ class LQGDiscreteModel():
     
     def get_goal_state(self):
         return self.lqm.goal_state
+    
+
+class LQGDiscreteModel2:
+    def __init__(self, lqrm, name=''):
+        
+        self.state = lqrm.state
+        self.u = lqrm.u
+        self.dt = lqrm.dt
+        self.name = name
+        self.state_names = lqrm.state_names
+        self.goal_state = lqrm.goal_state
+        self.goal_u = lqrm.goal_u
+
+        # do I need to keep this?
+        self.model_c = lqrm
+
+        sys_c = ss(lqrm.A, lqrm.B, np.eye(lqrm.state_size()), np.zeros_like(lqrm.B))
+        sys_d = c2d(sys_c, self.dt, 'zoh')
+        self.A = sys_d.A
+        self.B = sys_d.B
+        self.C = lqrm.C
+
+        Qd = lqrm.Q * self.dt         
+        Rd = lqrm.R * self.dt
+        self.K, _, _ = dlqr(self.A, self.B, Qd, Rd)
+
+    
+        Vd = lqrm.Q_kf * self.dt         # process-noise cov.
+        Wd = lqrm.R_kf / self.dt         # measurement-noise cov. (typical scaling)
+        self.Kf = dlqr(self.A.transpose(), self.C.transpose(), Vd, Wd)[0].transpose()
+
+    def state_size(self):
+        return self.state.size1()
+    
+    def input_size(self):
+        return self.u.size1()
+    
+    def get_name(self):
+        return self.name
+    
+    def get_state_names(self):
+        return self.state_names
+    
+    def get_next_state(self, x, u, y):
+        xr = self.goal_state
+        ur = self.goal_u
+        return self.A@(x - xr) + self.B@(u - ur) + self.Kf@(y - self.C@x) + xr
+    
+    
+    def get_control_input(self, x):
+        return -self.K@(x - self.goal_state)
