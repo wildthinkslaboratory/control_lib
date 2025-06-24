@@ -19,14 +19,25 @@ class Simulator:
     def run(self):
         x = self.x0
         u = self.u0
-        y = self.x0 # full state
+
+        # if our model doesn't have a Kalman Filter then y
+        # will just be a dummy variable
+        y = self.x0
+        if self.model.has_kalman_filter():
+            y = self.model.C@self.x0 
+
         start_time = perf_counter()
         for i in range(len(self.tspan)):
-            x = self.model.get_next_state(x,u,y)
-            u = self.model.get_control_input(x)
-            y = x # assume perfect sensors
+            x = self.model.next_state(x,u,y)
+            u = self.model.control_input(x)
+
+            # if we have a Kalman Filter then just set
+            # the sensor values to the state
+            if self.model.has_kalman_filter():
+                y = self.model.C@x
+
             self.data[i] =  np.append(x, u)
-        print('Time for {} iterations of {} is {}'.format(len(self.tspan), self.model.get_name(), perf_counter() - start_time))
+        print('Time for {} iterations of {} is {}'.format(len(self.tspan), self.model.model_name(), perf_counter() - start_time))
 
 
         plt.rcParams.update({'font.size': 12})
@@ -37,10 +48,10 @@ class Simulator:
         ns = self.model.state_size()
 
         for i in range(ns):
-            plt.plot(self.tspan,self.data[:,i],linewidth=2,label=self.model.get_state_names()[i])
+            plt.plot(self.tspan,self.data[:,i],linewidth=2,label=self.model.state_names()[i])
         plt.xlabel('Time')
         plt.ylabel('State')
-        plt.title(self.model.get_name())
+        plt.title(self.model.model_name())
         plt.legend(loc='lower right')
         plt.show()
 
@@ -48,10 +59,10 @@ class Simulator:
         nu = self.model.input_size()
         fig, axs = plt.subplots(ns + nu)
         fig.set_figheight(8)
-        fig.suptitle(self.model.get_name())
+        fig.suptitle(self.model.model_name())
         for i in range(ns):
             axs[i].plot(self.tspan,self.data[:,i],linewidth=2)
-            axs[i].set_ylabel(self.model.get_state_names()[i])
+            axs[i].set_ylabel(self.model.state_names()[i])
         for i in range(nu):
             axs[i+ns].plot(self.tspan,self.data[:,i+ns],linewidth=2)
             #axs[i+ns].set_ylabel(self.model.u[i].name())
