@@ -78,76 +78,155 @@ class Simulator:
         plt.show()
 
 
-
 class NoisySimulator:
-    def __init__(self, model, x0, u0, timespan):
+    def __init__(self, model, x0, u0, timespan, noise = []):
         self.model = model
         self.x0 = x0
         self.u0 = u0
         self.dt = model.dt
         self.tspan = np.arange(0,timespan,self.dt)
-        self.true_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
-        self.noisy_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
-        self.kf_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
-    
-        # set the default noise
-        self.noise = np.array([0.07, 0.0225])
+        self.true_data = np.empty([len(self.tspan),self.model.state_size()])
+        self.sensor_data = np.empty([len(self.tspan),self.model.state_size()])
+        self.md_data = np.empty([len(self.tspan),self.model.state_size()])
+
+        self.C = np.eye(self.model.state_size())
+        if self.model.has_kalman_filter():
+            self.C = self.model.C    
+
+        self.num_measurements = self.C.shape[0]
+        self.noise_var = noise
+        if noise == []:
+            self.noise_var = np.ones(self.num_measurements) * 0.001
+        
+
 
     def run(self):
-        num_measurements = self.model.C.shape[0]
-        x_noise = self.x0
-        x_kf = self.x0
         x_true = self.x0
+        u = self.u0
+        x_md = x_true
+        noise = np.zeros(self.num_measurements)
+        y = self.C@self.x0 
 
-        u_kf = np.concatenate((self.u0, self.model.C@self.x0), axis=0)
-        u_noise = self.u0
-        u_true = self.u0
-
-        noise = np.zeros(num_measurements)
-        sensors = np.zeros(num_measurements)
 
         for i in range(len(self.tspan)):
+
             # generate some noise
-            for j in range(num_measurements):
-                noise[j] = np.random.normal(0.0,np.sqrt(self.noise[j]))
+            for j, var in enumerate(self.noise_var):
+                noise[j] = np.random.normal(0.0,np.sqrt(var))
 
-            x_true = self.model.get_next_state_nonlinear(x_true,u_true,self.dt)
-            u_true = self.model.get_control_input(x_true)
-            self.true_data[i] = np.append(x_true, u_true)
+            # get the Kalman filter estimate 
+            # sensors are reading the true state plus some noise
+            y = self.C @ x_true + noise
+            x_md = self.model.next_state(x_md,u,y)
+           
+            # calculate where we really are if the sensors
+            # were perfect
+            dx = self.model.f(state=x_true, u=u, constants=self.model.constant_values)['dx']
+            x_true = x_true + dx*self.dt
 
-            # perturb our state with some noise
-            x_noise = x_noise + noise@self.model.C
-            x_noise = self.model.get_next_state_linear(x_noise,u_noise,self.dt)
-            u_noise = self.model.get_control_input(x_noise)
-            self.noisy_data[i] = np.append(x_noise, u_noise)
+            # sensor readings are the true state perturbed by some noise
+            x_sensors = x_true + self.C.transpose() @ noise
 
-            x_kf = self.model.get_next_state_kf(x_kf, u_kf, self.dt)
-            u_kf[0] = self.model.get_control_input(x_kf)
-            u_kf[1:4] = noise + self.model.C@x_kf
-            self.kf_data[i] = np.append(x_kf, u_kf[0])
+            # get the control input based on our estimated state
+            u = self.model.control_input(x_md)
+
+            self.true_data[i] =  np.reshape(x_true, (4,))
+            self.md_data[i] = np.reshape(x_md, (4,))
+            self.sensor_data[i] = np.reshape(x_sensors, (4,))
+    
 
 
-
-        # plt.rcParams['figure.figsize'] = [8, 8]
         plt.rcParams.update({'font.size': 12})
         plt.rcParams.update({
         "text.usetex": True,
         })
-        
-        m = np.ones((num_measurements,))
-        measurements = m@self.model.C
 
-        for i in range(self.model.state_size()):
-            if measurements[i] != 0.0:
-                plt.plot(self.tspan, self.noisy_data[:,i],linewidth=1,label=('true + noise'))
-                plt.plot(self.tspan,self.kf_data[:,i],linewidth=2,label='Kalman filter')
-                plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label='true')
-                plt.xlabel('time')
-                plt.ylabel(self.model.state_names[i])
-                plt.legend()
-                plt.title(self.model.name)
-                # plt.savefig("documents/KFangular_velocity.pdf", format="pdf", bbox_inches="tight")
-                plt.show()
+        ns = self.model.state_size()
+        s_i = self.C @ [i for i in range(ns)]
+        s_i = [int(i) for i in s_i]
+        for i in s_i:
+            plt.plot(self.tspan,self.true_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' true')
+            plt.plot(self.tspan,self.sensor_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' sensors')
+            plt.plot(self.tspan,self.md_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' kf')
+            plt.xlabel('Time')
+            plt.ylabel('State')
+            plt.title(self.model.model_name())
+            plt.legend(loc='lower right')
+            plt.show()
+
+
+
+
+
+# class NoisySimulator:
+#     def __init__(self, model, x0, u0, timespan):
+#         self.model = model
+#         self.x0 = x0
+#         self.u0 = u0
+#         self.dt = model.dt
+#         self.tspan = np.arange(0,timespan,self.dt)
+#         self.true_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+#         self.noisy_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+#         self.kf_data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+    
+#         # set the default noise
+#         self.noise = np.array([0.07, 0.0225])
+
+#     def run(self):
+#         num_measurements = self.model.C.shape[0]
+#         x_noise = self.x0
+#         x_kf = self.x0
+#         x_true = self.x0
+
+#         u_kf = np.concatenate((self.u0, self.model.C@self.x0), axis=0)
+#         u_noise = self.u0
+#         u_true = self.u0
+
+#         noise = np.zeros(num_measurements)
+#         sensors = np.zeros(num_measurements)
+
+#         for i in range(len(self.tspan)):
+#             # generate some noise
+#             for j in range(num_measurements):
+#                 noise[j] = np.random.normal(0.0,np.sqrt(self.noise[j]))
+
+#             x_true = self.model.get_next_state_nonlinear(x_true,u_true,self.dt)
+#             u_true = self.model.get_control_input(x_true)
+#             self.true_data[i] = np.append(x_true, u_true)
+
+#             # perturb our state with some noise
+#             x_noise = x_noise + noise@self.model.C
+#             x_noise = self.model.get_next_state_linear(x_noise,u_noise,self.dt)
+#             u_noise = self.model.get_control_input(x_noise)
+#             self.noisy_data[i] = np.append(x_noise, u_noise)
+
+#             x_kf = self.model.get_next_state_kf(x_kf, u_kf, self.dt)
+#             u_kf[0] = self.model.get_control_input(x_kf)
+#             u_kf[1:4] = noise + self.model.C@x_kf
+#             self.kf_data[i] = np.append(x_kf, u_kf[0])
+
+
+
+#         # plt.rcParams['figure.figsize'] = [8, 8]
+#         plt.rcParams.update({'font.size': 12})
+#         plt.rcParams.update({
+#         "text.usetex": True,
+#         })
+        
+#         m = np.ones((num_measurements,))
+#         measurements = m@self.model.C
+
+#         for i in range(self.model.state_size()):
+#             if measurements[i] != 0.0:
+#                 plt.plot(self.tspan, self.noisy_data[:,i],linewidth=1,label=('true + noise'))
+#                 plt.plot(self.tspan,self.kf_data[:,i],linewidth=2,label='Kalman filter')
+#                 plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label='true')
+#                 plt.xlabel('time')
+#                 plt.ylabel(self.model.state_names[i])
+#                 plt.legend()
+#                 plt.title(self.model.name)
+#                 # plt.savefig("documents/KFangular_velocity.pdf", format="pdf", bbox_inches="tight")
+#                 plt.show()
 
 
 

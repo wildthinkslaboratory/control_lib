@@ -92,6 +92,10 @@ class LQRModel(ControlModel):
         self.K = np.array([])
         self.x_ref = np.array([])
         self.u_ref = np.array([])
+        self.eigenvalues = np.array([])
+        self.recommended_dt = 0
+        self.controllable = False
+        
 
 
     def set_up_K(self, Q, R, 
@@ -118,37 +122,33 @@ class LQRModel(ControlModel):
         # next we check if system is controlable
         # we check to see that the controllability matrix
         # has full rank
-        if np.linalg.matrix_rank(ctrb(self.A, self.B)) == self.x_size:
-            print('\nSystem is controllable! \n')
-        else:
-            print('\nSystem is not controllable')
+        self.controllable = np.linalg.matrix_rank(ctrb(self.A, self.B)) == self.x_size
 
         # compute the input rule
         self.K, S, E = lqr(self.A,self.B,self.Q,self.R) 
     
         # print system eigenvalues
         sys_matrix = self.A - self.B @ self.K
-        eigenvalues, eigenvectors = np.linalg.eig(sys_matrix)
-        print('Eigenvalues for A-BK matrix of', self.name, 'system')
-        print(eigenvalues)
-        recommended_dt = abs(0.5 / min(eigenvalues))
-        print(recommended_dt, 'ms is the maximum recommended dt for a Forward Euler integrator')
+        self.eigenvalues, eigenvectors = np.linalg.eig(sys_matrix)
+        self.recommended_dt = abs(0.5 / min(self.eigenvalues))
 
 
     def __repr__(self):
         name = self.name
         states = '\tstates= [' +  ', '.join(self.x_names) + ']'
         dt = '\tdt= ' + str(self.dt)
-        A = 'A= \n'
+        setup = ''
         if self.A.any():
-            A += str(self.A)
-        B = 'B= \n'
-        if self.B.any():
-            B += str(self.B)
-        K = 'K= \n'
-        if self.K.any():
-            K += str(self.K)
-        return f"LQRModel: {name},\n{states},\n{dt},\n{A},\n{B},\n{K}"
+            A = 'A: \n' + str(self.A)
+            B = 'B: \n' + str(self.B)
+            K = 'K: \n' + str(self.K)
+            E = 'Eigenvalues: \n' + str(self.eigenvalues)
+            C = 'System is not controllable'
+            if self.controllable:
+                C = 'System is controllable'
+            r_dt = 'Euler forward recommended dt: ' + str(self.recommended_dt)
+            setup = f"{A},\n{B},\n{K},\n{E},\n{C},\n{r_dt}"
+        return f"LQRModel: {name},\n{states},\n{dt},\n{setup}"
 
     # ____________________________________________________________________
     #
@@ -206,11 +206,7 @@ class LQGModel(LQRModel):
         self.V_d = np.array([])
         self.V_n = np.array([])
         self.Kf = np.array([])
-        
-    def set_up_K(self, Q, R, 
-                 x_reference = None, 
-                 u_reference = None):
-        super().set_up_K(Q, R, x_reference, u_reference)
+        self.observable = False
 
 
     def set_up_kalman_filter(self, C, V_d, V_n):
@@ -227,25 +223,30 @@ class LQGModel(LQRModel):
         self.V_n = V_n
 
         # next we check if system is observable
-        # we check to see that the controllability matrix
-        # has full rank
-        if np.linalg.matrix_rank(obsv(self.A, self.C).transpose()) == self.x_size:
-            print('\nSystem is observable! \n')
-        else:
-            print('\nSystem is not observable')
+        self.observable = np.linalg.matrix_rank(obsv(self.A, self.C).transpose()) == self.x_size
 
         # Generate our Kalman Filter
         self.Kf = lqr(self.A.transpose(), self.C.transpose(), self.V_d, self.V_n)[0].transpose()
 
 
     def __repr__(self):
-        Kf = '\nKf= \n'
+        setup = ''
         if self.Kf.any():
-            Kf += str(self.Kf)
-        return 'LQGModel with Kalman filter \n' + super().__repr__() + Kf
+            O = 'System is not observable'
+            if self.observable:
+                O = 'System is observable'
+            Kf = 'Kalman Filter: \n' + str(self.Kf)
+            setup = f"\n{O},\n{Kf}"
 
+        return 'LQGModel with Kalman filter \n' + super().__repr__() + setup
 
-    def next_state(self, x, u ,y):
+    # ____________________________________________________________________
+    #
+    #  these are all the functions required by the ControlModel interface
+    #  those not listed here are inherited fro LQRModel
+    # ____________________________________________________________________
+
+    def next_state(self, x, u , y):
         dx = self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.Kf@(y - self.C@x)
         return x + dx*self.dt
 
@@ -254,6 +255,42 @@ class LQGModel(LQRModel):
     
 
 class LQRDModel(LQRModel):
+
+    # __init_ function is inherited from LQRModel
+
+    def __repr__(self):
+        return 'LQRDModel \n' + super().__repr__()
+
+    def set_up_K(self, Q, R, 
+                 x_reference = None, 
+                 u_reference = None):
+        
+        super().set_up_K(Q, R, x_reference, u_reference)
+
+        sys_c = ss(self.A, self.B, np.eye(self.state_size()), np.zeros_like(self.B))
+        sys_d = c2d(sys_c, self.dt, 'zoh')
+
+        # replace continuous matrices with new discrete ones
+        self.A = sys_d.A
+        self.B = sys_d.B
+        self.K, S, E = dlqr(sys_d, self.Q, self.R)
+
+    # ____________________________________________________________________
+    #
+    #  these are all the functions required by the ControlModel interface
+    #  those not listed here are inherited fro LQRModel
+    # ____________________________________________________________________
+
+
+    def next_state(self, x, u ,y):
+        return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
+
+
+    def control_input(self, x):
+        return -self.K@(x - self.x_ref)
+
+
+class LQGDModel(LQRDModel):
     def __init__(self, 
                  state, 
                  right_hand_side, 
@@ -272,148 +309,40 @@ class LQRDModel(LQRModel):
                          dt,
                          state_names,
                          name)
+        
+        # set up data structures for Kalman Filter
+        self.C = np.array([])
+        self.V_d = np.array([])
+        self.V_n = np.array([])
+        self.Kf = np.array([])
+        self.observable = False
 
- 
+    def set_up_kalman_filter(self, C, V_d, V_n):
+        
+        self.C = C         # C is our measurement model
+        self.V_d = V_d     # our state disturbance matrix
+        self.V_n = V_n     # our sensor noise matrix
+    
+        self.V_d = self.V_d * self.dt         # process-noise cov.
+        self.V_n = self.V_n / self.dt         # measurement-noise cov. (typical scaling)
+        self.Kf = dlqr(self.A.transpose(), self.C.transpose(), self.V_d, self.V_n)[0].transpose()
 
     def __repr__(self):
-        return 'LQRDModel \n' 
+        setup = ''
+        if self.Kf.any():
+            Kf = 'Kalman Filter: \n' + str(self.Kf)
+            setup = f"\n{Kf}"
+
+        return 'LQGModel with Kalman filter \n' + super().__repr__() + setup    
+
+    def next_state(self, x, u , y):
+        return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.Kf@(y - self.C@x) + self.x_ref
+
+    def has_kalman_filter(self):
+        return True   
 
 
-
-    def set_up_K(self, Q, R, 
-                 x_reference = None, 
-                 u_reference = None):
-        
-        super().set_up_K(Q, R, x_reference, u_reference)
-
-        sys_c = ss(self.A, self.B, np.eye(self.state_size()), np.zeros_like(self.B))
-        sys_d = c2d(sys_c, self.dt, 'zoh')
-
-        # replace continuous matrices with new discrete ones
-        self.A = sys_d.A
-        self.B = sys_d.B
-        self.K, S, E = dlqr(sys_d, self.Q, self.R)
-
-    # def state_size(self):
-    #     return self.lqm.state_size()
-    
-    # def input_size(self):
-    #     return self.lqm.input_size()
-    
-    # def get_next_state(self, x0, u0):
-    #     xr = self.lqm.goal_state
-    #     ur = self.lqm.goal_u
-    #     return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr
-    
-    # def get_next_state_simulator(self, x0, u0, dt):
-    #     return self.get_next_state(x0,u0)
-
-    # def get_control_input(self, x0):
-    #     return -self.K_d@(x0 - self.lqm.goal_state)
-
-    # def get_name(self):
-    #     return self.name
-    
-    # def get_state_names(self):
-    #     return self.lqm.state_names
-    
-    # def get_goal_state(self):
-    #     return self.lqm.goal_state
-    
-# class LQGDiscreteModel():
-#     def __init__(self, lqm, name=''):
-#         self.lqm = lqm
-#         self.dt = lqm.dt
-#         self.name = name
-#         if name == '':
-#             self.name = lqm.name
-
-#         self.C = lqm.C
-#         sys_c = ss(lqm.A_kf, lqm.B_kf, lqm.C_kf, lqm.D_kf)
-#         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
-
-#         R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
-#         self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
-
-#         self.adj_input_size = self.lqm.input_size() + self.lqm.C.shape[0]
-    
-#     def state_size(self):
-#         return self.lqm.state_size()
-    
-#     def input_size(self):
-#         return self.adj_input_size
-    
-#     def get_next_state(self, x0, u0):
-#         xr = self.lqm.goal_state
-#         ur = self.lqm.goal_u_kf
-#         return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr
-    
-#     def get_next_state_simulator(self, x0, u0, dt):
-#         return self.get_next_state(x0,u0)
-
-#     def get_control_input(self, x0):
-#         return -self.K_d@(x0 - self.lqm.goal_state)
-    
-#     def get_name(self):
-#         return self.name
-    
-#     def get_state_names(self):
-#         return self.lqm.state_names
-    
-#     def get_goal_state(self):
-#         return self.lqm.goal_state
     
 
-# class LQGDiscreteModel2:
-#     def __init__(self, lqrm, name=''):
-        
-#         self.state = lqrm.state
-#         self.u = lqrm.u
-#         self.dt = lqrm.dt
-#         self.name = name
-#         self.state_names = lqrm.state_names
-#         self.goal_state = lqrm.goal_state
-#         self.goal_u = lqrm.goal_u
-
-#         # do I need to keep this?
-#         self.model_c = lqrm
-
-#         sys_c = ss(lqrm.A, lqrm.B, np.eye(lqrm.state_size()), np.zeros_like(lqrm.B))
-#         sys_d = c2d(sys_c, self.dt, 'zoh')
-#         self.A = sys_d.A
-#         self.B = sys_d.B
-#         self.C = lqrm.C
-
-#         Qd = lqrm.Q * self.dt         
-#         Rd = lqrm.R * self.dt
-#         self.K, _, _ = dlqr(self.A, self.B, Qd, Rd)
 
     
-#         Vd = lqrm.Q_kf * self.dt         # process-noise cov.
-#         Wd = lqrm.R_kf / self.dt         # measurement-noise cov. (typical scaling)
-#         self.Kf = dlqr(self.A.transpose(), self.C.transpose(), Vd, Wd)[0].transpose()
-
-#     def state_size(self):
-#         return self.state.size1()
-    
-#     def input_size(self):
-#         return self.u.size1()
-    
-#     def get_name(self):
-#         return self.name
-    
-#     def get_state_names(self):
-#         return self.state_names
-    
-#     def get_next_state(self, x, u, y):
-#         xr = self.goal_state
-#         ur = self.goal_u
-#         print('Ax + Bu', self.A@(x - xr) + self.B@(u - ur))
-#         print('Kfy', self.Kf@y)
-#         print('KfCx', -self.Kf@self.C@x)
-#         print('\n')
-#         return self.A@(x - xr) + self.B@(u - ur) + self.Kf@(y - self.C@x) + xr
-    
-    
-#     def get_control_input(self, x):
-#         return -self.K@(x - self.goal_state)

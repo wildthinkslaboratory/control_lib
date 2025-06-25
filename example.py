@@ -1,7 +1,7 @@
 import casadi as ca
 from casadi import sin, cos
-from model import LQRModel, LQGModel, LQRDModel
-from simulator import Simulator
+from model import LQRModel, LQGModel, LQRDModel, LQGDModel
+from simulator import Simulator, NoisySimulator
 import numpy as np
 
 
@@ -100,15 +100,23 @@ lqrdBot = LQRDModel(state,
                 constant_values, 
                 dt,
                 state_names=my_state_names,
-                name='balancing robot LQR')
+                name='balancing robot LQRD')
 
 lqrdBot.set_up_K(Q, R, goal_state, goal_u)
 
-print(lqrBot)
-print('\n\n')
-print(lqrdBot)
 
-# lqgdBot = LQGDiscreteModel(lqgBot, name='Discrete LQG Balance Bot')
+lqgdBot = LQGDModel(state, 
+                RHS, 
+                u, 
+                constants, 
+                constant_values, 
+                dt,
+                state_names=my_state_names,
+                name='balancing robot LQGD')
+
+
+lqgdBot.set_up_K(Q, R, goal_state, goal_u)
+lqgdBot.set_up_kalman_filter(C, V_d, V_n)
 
 
 if __name__ == "__main__":
@@ -119,4 +127,6 @@ if __name__ == "__main__":
 
     # simulator = Simulator(lqgBot, x0, u0, sim_length)
     # simulator.run()
-    pass
+    
+    simulator = NoisySimulator(lqgBot, x0, u0, sim_length)
+    simulator.run()
