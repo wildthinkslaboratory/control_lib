@@ -236,6 +236,7 @@ class LQGDiscreteModel():
         self.sys_d = c2d(sys_c, lqm.dt, 'zoh')
 
         R_diag = np.concatenate((lqm.R.diagonal(), lqm.R_kf.diagonal()), axis=0)
+ #       R_diag = np.concatenate((lqm.R.diagonal(), np.ones(2)), axis=0)
         self.K_d, S, E = dlqr(self.sys_d, lqm.Q, np.diag(R_diag))
 
         self.adj_input_size = self.lqm.input_size() + self.lqm.C.shape[0]
@@ -287,11 +288,16 @@ class LQGDiscreteModel2:
         self.B = sys_d.B
         self.C = lqrm.C
 
-        Qd = lqrm.Q * self.dt         
-        Rd = lqrm.R * self.dt
-        self.K, _, _ = dlqr(self.A, self.B, Qd, Rd)
-
+        # Qd = lqrm.Q * self.dt         
+        # Rd = lqrm.R * self.dt
     
+        Qd = lqrm.Q         
+        Rd = lqrm.R * 0.005
+
+        self.K, _, _ = dlqr(self.A, self.B, Qd, Rd) 
+
+        print('Rd', Rd, 'K', self.K)
+
         Vd = lqrm.Q_kf * self.dt         # process-noise cov.
         Wd = lqrm.R_kf / self.dt         # measurement-noise cov. (typical scaling)
         self.Kf = dlqr(self.A.transpose(), self.C.transpose(), Vd, Wd)[0].transpose()
@@ -312,7 +318,6 @@ class LQGDiscreteModel2:
         xr = self.goal_state
         ur = self.goal_u
         return self.A@(x - xr) + self.B@(u - ur) + self.Kf@(y - self.C@x) + xr
-    
     
     def get_control_input(self, x):
         return -self.K@(x - self.goal_state)

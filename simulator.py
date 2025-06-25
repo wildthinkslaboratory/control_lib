@@ -75,8 +75,8 @@ class Comparison:
         self.u0 = u0
         self.dt = self.model.dt
         self.tspan = np.arange(0,timespan, self.dt)
-        self.data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
-        self.data2 = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+        self.data = np.empty([len(self.tspan),self.model.state_size() + 1])
+        self.data2 = np.empty([len(self.tspan),self.model.state_size() + 1])
         self.input_bound = np.array([])
 
     def add_intput_bound(self, bound):
@@ -90,17 +90,27 @@ class Comparison:
         x2 = self.x0
         u2 = self.u0
         y2 = self.x0 # full state
-        start_time = perf_counter()
-        for i in range(len(self.tspan)):
-            x = self.model.get_next_state(x,u,y)
-            u = self.model.get_control_input(x)
-            y = x # assume perfect sensors
-            self.data[i] =  np.append(x, u)
 
-            x2 = self.model.get_next_state(x2,u2,y2)
-            u2 = self.model.get_control_input(x2)
+        start_time = perf_counter()
+
+        print(self.model2.goal_state)
+        for i in range(len(self.tspan)):
+            # x = self.model.get_next_state(x,u,y)
+            # u = self.model.get_control_input(x)
+            # y = x # assume perfect sensors
+            # self.data[i] =  np.append(x, u[:1])
+
+            x = self.model2.A @ (x - self.model2.goal_state) + self.model2.B @ u2 + self.model2.goal_state
+            # u = self.model.get_control_input(x)
+            y = x # assume perfect sensors
+            self.data[i] =  np.append(x, u2[:1])
+
+
+            x2 = self.model2.get_next_state(x2,u2,y2)
+            u2 = self.model2.get_control_input(x2)
             y2 = x2 # assume perfect sensors
             self.data2[i] =  np.append(x2, u2)
+
         print('Time for {} iterations of {} is {}'.format(len(self.tspan), self.model.get_name(), perf_counter() - start_time))
 
 
@@ -121,7 +131,7 @@ class Comparison:
         plt.show()
 
 
-        nu = self.model.input_size()
+        nu = self.model2.input_size()
         fig, axs = plt.subplots(ns + nu)
         fig.set_figheight(8)
         fig.suptitle(self.model.get_name())
