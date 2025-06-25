@@ -125,8 +125,8 @@ if __name__ == "__main__":
     x0 = np.array([1.0,0,np.pi + 0.3, 0.0]) # Initial condition
     sim_length = 4 # in seconds
 
-    # simulator = Simulator(lqgBot, x0, u0, sim_length)
-    # simulator.run()
+    simulator = Simulator(lqgdBot, x0, u0, sim_length)
+    simulator.run()
     
-    simulator = NoisySimulator(lqgBot, x0, u0, sim_length)
+    simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
     simulator.run()

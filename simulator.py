@@ -107,7 +107,6 @@ class NoisySimulator:
         noise = np.zeros(self.num_measurements)
         y = self.C@self.x0 
 
-
         for i in range(len(self.tspan)):
 
             # generate some noise
