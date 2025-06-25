@@ -246,7 +246,7 @@ class LQGDiscreteModel():
     def input_size(self):
         return self.adj_input_size
     
-    def get_next_state(self, x0, u0):
+    def get_next_state(self, x0, u0, y):
         xr = self.lqm.goal_state
         ur = self.lqm.goal_u_kf
         return self.sys_d.A@(x0 - xr) + self.sys_d.B@(u0 - ur) + xr

@@ -67,6 +67,83 @@ class Simulator:
         plt.show()
 
 
+class Comparison:
+    def __init__(self, model, model2, x0, u0, timespan):
+        self.model = model
+        self.model2 = model2
+        self.x0 = x0
+        self.u0 = u0
+        self.dt = self.model.dt
+        self.tspan = np.arange(0,timespan, self.dt)
+        self.data = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+        self.data2 = np.empty([len(self.tspan),self.model.state_size() + self.model.input_size()])
+        self.input_bound = np.array([])
+
+    def add_intput_bound(self, bound):
+        assert len(bound) == len(self.u0)
+        self.input_bound = bound
+
+    def run(self):
+        x = self.x0
+        u = self.u0
+        y = self.x0 # full state
+        x2 = self.x0
+        u2 = self.u0
+        y2 = self.x0 # full state
+        start_time = perf_counter()
+        for i in range(len(self.tspan)):
+            x = self.model.get_next_state(x,u,y)
+            u = self.model.get_control_input(x)
+            y = x # assume perfect sensors
+            self.data[i] =  np.append(x, u)
+
+            x2 = self.model.get_next_state(x2,u2,y2)
+            u2 = self.model.get_control_input(x2)
+            y2 = x2 # assume perfect sensors
+            self.data2[i] =  np.append(x2, u2)
+        print('Time for {} iterations of {} is {}'.format(len(self.tspan), self.model.get_name(), perf_counter() - start_time))
+
+
+        plt.rcParams.update({'font.size': 12})
+        plt.rcParams.update({
+        "text.usetex": True,
+        })
+
+        ns = self.model.state_size()
+
+        for i in range(ns):
+            plt.plot(self.tspan,self.data[:,i],linewidth=2,label=self.model.get_state_names()[i])
+            plt.plot(self.tspan,self.data2[:,i],linewidth=2,label=self.model.get_state_names()[i])
+        plt.xlabel('Time')
+        plt.ylabel('State')
+        plt.title(self.model.get_name())
+        plt.legend(loc='lower right')
+        plt.show()
+
+
+        nu = self.model.input_size()
+        fig, axs = plt.subplots(ns + nu)
+        fig.set_figheight(8)
+        fig.suptitle(self.model.get_name())
+        for i in range(ns):
+            axs[i].plot(self.tspan,self.data[:,i],linewidth=2)
+            axs[i].plot(self.tspan,self.data2[:,i],linewidth=2)
+            axs[i].set_ylabel(self.model.get_state_names()[i])
+        for i in range(nu):
+            axs[i+ns].plot(self.tspan,self.data[:,i+ns],linewidth=2)
+            axs[i+ns].plot(self.tspan,self.data2[:,i+ns],linewidth=2)
+            #axs[i+ns].set_ylabel(self.model.u[i].name())
+
+            if self.input_bound.any():
+                if self.input_bound[i].any():
+                    upper = np.full((len(self.tspan),), self.input_bound[i][0])
+                    lower = np.full((len(self.tspan),), self.input_bound[i][1])
+                    axs[i+ns].plot(self.tspan,upper,linewidth=1)
+                    axs[i+ns].plot(self.tspan,lower,linewidth=1)
+                
+        plt.xlabel('Time')
+        plt.show()
+
 
 class NoisySimulator:
     def __init__(self, model, x0, u0, timespan):
