@@ -115,19 +115,18 @@ class NoisySimulator:
 
             # get the Kalman filter estimate 
             # sensors are reading the true state plus some noise
-            y = self.C @ x_true + noise
+            y = self.C @ x_true + noise 
             x_md = self.model.next_state(x_md,u,y)
            
             # calculate where we really are if the sensors
             # were perfect
-            dx = self.model.f(state=x_true, u=u, constants=self.model.constant_values)['dx']
-            x_true = x_true + dx*self.dt
+            x_true = self.model.next_state_no_kf(x_true, u)
 
             # sensor readings are the true state perturbed by some noise
             x_sensors = x_true + self.C.transpose() @ noise
 
             # get the control input based on our estimated state
-            u = self.model.control_input(x_md)
+            u = self.model.control_input(x_true)
 
             self.true_data[i] =  np.reshape(x_true, (4,))
             self.md_data[i] = np.reshape(x_md, (4,))
@@ -144,8 +143,8 @@ class NoisySimulator:
         s_i = self.C @ [i for i in range(ns)]
         s_i = [int(i) for i in s_i]
         for i in s_i:
-            plt.plot(self.tspan,self.true_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' true')
-            plt.plot(self.tspan,self.sensor_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' sensors')
+            plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' true')
+            plt.plot(self.tspan,self.sensor_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' sensors')
             plt.plot(self.tspan,self.md_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' kf')
             plt.xlabel('Time')
             plt.ylabel('State')

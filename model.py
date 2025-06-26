@@ -328,7 +328,7 @@ class LQGDModel(LQRDModel):
         
         self.C = C         # C is our measurement model
         self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise         
-        self.V_n = V_n       # measurement-noise 
+        self.V_n = V_n      # measurement-noise 
         self.Kf = dlqr(self.A.transpose(), self.C.transpose(), self.V_d, self.V_n)[0].transpose()
 
     def __repr__(self):
@@ -345,6 +345,13 @@ class LQGDModel(LQRDModel):
     def has_kalman_filter(self):
         return True   
 
-    # this gives us the 
+    # The next functions help with debugging and tuning a Kalman Filter
+    # It helps to seperate the model estimate from the sensor fusion
+    
+    # Model estimate
+    def next_state_no_kf(self, x, u):
+        return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
+    
+    # Sensor fusion
     def sensor_fusion(self, x, y):
         return self.Kf@(y - self.C@x)

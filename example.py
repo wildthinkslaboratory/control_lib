@@ -89,7 +89,8 @@ C = np.array([[1, 0, 0, 0], \
             [0, 0, 0, 1]]) 
 
 V_d = np.eye(4)
-V_n = np.eye(3) * 0.001
+V_n = np.eye(3)
+# V_n = np.diag([0.0001, 0.037, 0.0000029]) # computed variance for MPU6050
 
 lqgBot.set_up_kalman_filter(C, V_d, V_n)
 
@@ -125,14 +126,21 @@ if __name__ == "__main__":
     x0 = np.array([1.0,0,np.pi + 0.3, 0.0]) # Initial condition
     sim_length = 4 # in seconds
 
-    simulator = Simulator(lqrBot, x0, u0, sim_length)
-    simulator.run()
+    # simulator = Simulator(lqrBot, x0, u0, sim_length)
+    # simulator.run()
 
-    simulator = Simulator(lqgBot, x0, u0, sim_length)
-    simulator.run()
+    # simulator = Simulator(lqgBot, x0, u0, sim_length)
+    # simulator.run()
 
-    simulator = Simulator(lqrdBot, x0, u0, sim_length)
-    simulator.run()
+    # simulator = Simulator(lqrdBot, x0, u0, sim_length)
+    # simulator.run()
 
-    simulator = Simulator(lqgdBot, x0, u0, sim_length)
+    # simulator = Simulator(lqgdBot, x0, u0, sim_length)
+    # simulator.run()
+
+    # simulator = NoisySimulator(lqgBot, x0, u0, sim_length)
+    # simulator.run()
+
+    print(lqgdBot)
+    simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
     simulator.run()
