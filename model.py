@@ -2,6 +2,7 @@ import casadi as ca
 import numpy as np
 from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr
 from abc import ABC, abstractmethod
+from utilities import van_loan_discretise_Q
 
 # ____________________________________________________________________
 # 
@@ -270,6 +271,11 @@ class LQRDModel(LQRModel):
         sys_c = ss(self.A, self.B, np.eye(self.state_size()), np.zeros_like(self.B))
         sys_d = c2d(sys_c, self.dt, 'zoh')
 
+        # keep around the continuous A matrix so we can compute
+        # a discrete process noise matrix with Van Loan discretization
+        # if we need a Kalman Filter
+        self.A_c = self.A
+
         # replace continuous matrices with new discrete ones
         self.A = sys_d.A
         self.B = sys_d.B
@@ -320,11 +326,8 @@ class LQGDModel(LQRDModel):
     def set_up_kalman_filter(self, C, V_d, V_n):
         
         self.C = C         # C is our measurement model
-        self.V_d = V_d     # our state disturbance matrix
-        self.V_n = V_n     # our sensor noise matrix
-    
-        self.V_d = self.V_d * self.dt         # process-noise cov.
-        self.V_n = self.V_n / self.dt         # measurement-noise cov. (typical scaling)
+        self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise         
+        self.V_n = V_n       # measurement-noise 
         self.Kf = dlqr(self.A.transpose(), self.C.transpose(), self.V_d, self.V_n)[0].transpose()
 
     def __repr__(self):
