@@ -44,7 +44,7 @@ RHS = ca.vertcat(
 # the constant values are imported from the build file
 M_ = 0.05       # wheels plus motors (kilograms) 
 m_ = 1          # rest of the robot (kilograms)
-L_ = 1.22        # length of pendulum (meters)
+L_ = 0.06        # length of pendulum (meters)
 g_ = -9.81       # gravity, (meters / sec^2)
 d_ = 0.01       # d is a damping factor
 
@@ -125,13 +125,13 @@ if __name__ == "__main__":
     x0 = np.array([1.0,0,np.pi + 0.3, 0.0]) # Initial condition
     sim_length = 4 # in seconds
 
-    # simulator = Simulator(lqgdBot, x0, u0, sim_length)
-    # simulator.run()
-
     simulator = Simulator(lqrBot, x0, u0, sim_length)
     simulator.run()
 
-    simulator = Simulator(lqgdBot, x0, u0, sim_length)
+    simulator = Simulator(lqgBot, x0, u0, sim_length)
+    simulator.run()
+
+    simulator = Simulator(lqrdBot, x0, u0, sim_length)
     simulator.run()
 
     simulator = Simulator(lqgdBot, x0, u0, sim_length)

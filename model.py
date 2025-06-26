@@ -253,6 +253,7 @@ class LQGModel(LQRModel):
 
     def has_kalman_filter(self):
         return True
+
     
 
 class LQRDModel(LQRModel):
@@ -344,8 +345,6 @@ class LQGDModel(LQRDModel):
     def has_kalman_filter(self):
         return True   
 
-
-    
-
-
-    
+    # this gives us the 
+    def sensor_fusion(self, x, y):
+        return self.Kf@(y - self.C@x)
