@@ -1,8 +1,9 @@
 import casadi as ca
 from casadi import sin, cos
 from model import LQRModel, LQGModel, LQRDModel, LQGDModel
-from simulator import Simulator, NoisySimulator
+from simulator import Simulator, NoisySimulator, KalmanFilterTuner
 import numpy as np
+from utilities import import_data
 
 
 # We create Casadi symbolic variables for the state
@@ -141,6 +142,15 @@ if __name__ == "__main__":
     # simulator = NoisySimulator(lqgBot, x0, u0, sim_length)
     # simulator.run()
 
-    print(lqgdBot)
-    simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
-    simulator.run()
+    # simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
+    # simulator.run()
+
+    run_data = import_data('data.json')
+    num_cols = len(run_data[0])
+    sensor_data = []
+    for col in range(num_cols):
+        A = [d[col] for d in run_data]
+        sensor_data.append(A)
+
+    filter_tuner = KalmanFilterTuner(lqgdBot, x0, u0, sensor_data)
+    filter_tuner.run()

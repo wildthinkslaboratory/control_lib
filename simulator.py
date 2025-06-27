@@ -106,6 +106,7 @@ class NoisySimulator:
         x_md = x_true
         noise = np.zeros(self.num_measurements)
         y = self.C@self.x0 
+        num_states = self.model.state_size()
 
         for i in range(len(self.tspan)):
 
@@ -128,9 +129,9 @@ class NoisySimulator:
             # get the control input based on our estimated state
             u = self.model.control_input(x_true)
 
-            self.true_data[i] =  np.reshape(x_true, (4,))
-            self.md_data[i] = np.reshape(x_md, (4,))
-            self.sensor_data[i] = np.reshape(x_sensors, (4,))
+            self.true_data[i] =  np.reshape(x_true, (num_states,))
+            self.md_data[i] = np.reshape(x_md, (num_states,))
+            self.sensor_data[i] = np.reshape(x_sensors, (num_states,))
     
 
 
@@ -153,4 +154,38 @@ class NoisySimulator:
             plt.show()
 
 
+
+class KalmanFilterTuner:
+    def __init__(self, model, data):
+        self.model = model
+        self.dt = self.model.dt
+        self.tspan = np.arange(0,len(data[0]) * self.dt, self.dt)
+        self.data = data
+        self.C = self.model.C       
+
+        # collect the state indices for the sensors we have
+        s_i = self.C @ [i for i in range(self.model.state_size())]
+        self.sensor_indices = [int(i) for i in s_i]  
+
+        self.estimate_data = np.empty([len(self.tspan),len(self.sensor_indices)])
+
+    def run(self):
+
+        x = np.array([self.data[0][0], self.data[1][0]])
+        y = np.array([self.data[0][0], self.data[1][0]])
+        self.estimate_data[0] = x
+
+        for i in range(1,len(self.tspan)):
+            x = self.model.sensor_fusion(x,y)
+            self.estimate_data[i] =  self.C @ x
+            y = np.array([self.data[0][i], self.data[1][i]])
+
+        for i in range(len(self.sensor_indices)):
+            plt.plot(self.tspan,self.estimate_data[:,i],linewidth=1,label=self.model.state_names()[i] + 'estimate')
+            plt.plot(self.tspan,self.data[i],linewidth=2,label=self.model.state_names()[i] + ' sensor')
+            plt.xlabel('Time')
+            plt.ylabel('State')
+            plt.title(self.model.model_name())
+            plt.legend(loc='lower right')
+            plt.show()
 

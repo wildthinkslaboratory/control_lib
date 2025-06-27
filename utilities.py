@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.linalg import expm
+import json
 
 def van_loan_discretise_Q(A, Qc, Ts, G=None):
     n = A.shape[0]
@@ -20,3 +21,11 @@ def van_loan_discretise_Q(A, Qc, Ts, G=None):
     Qd  = Ad @ Phi[:n, n:]       # lower-left block times Ad
 
     return Qd
+
+
+def import_data(filename):
+    # Open and read the JSON file
+    data = {}
+    with open(filename, 'r') as file:
+        data = json.load(file)
+    return data

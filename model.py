@@ -253,7 +253,17 @@ class LQGModel(LQRModel):
 
     def has_kalman_filter(self):
         return True
-
+    
+    # # The next functions help with debugging and tuning a Kalman Filter
+    # # It helps to seperate the model estimate from the sensor fusion
+    
+    # # Model estimate
+    # def next_state_no_kf(self, x, u):
+    #     return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
+    
+    # # Sensor fusion
+    # def sensor_fusion(self, x, y):
+    #     return self.Kf@(y - self.C@x)
     
 
 class LQRDModel(LQRModel):
@@ -354,4 +364,4 @@ class LQGDModel(LQRDModel):
     
     # Sensor fusion
     def sensor_fusion(self, x, y):
-        return self.Kf@(y - self.C@x)
+        return self.Kf@(y - self.C@x) + x
