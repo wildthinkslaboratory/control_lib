@@ -41,7 +41,7 @@ RHS = ca.vertcat(
 # the constant values are imported from the build file
 M_ = 0.05       # wheels plus motors (kilograms) 
 m_ = 1          # rest of the robot (kilograms)
-L_ = 1.2        # length of pendulum (meters)
+L_ = 0.06       # length of pendulum (meters)
 g_ = -9.81       # gravity, (meters / sec^2)
 d_ = 0.01       # d is a damping factor
 
@@ -84,11 +84,12 @@ lqgBot.set_up_K(Q, R, goal_state, goal_u)
 C = np.array([[1, 0], \
             [0, 1]]) 
 
-V_d = np.eye(2)
-V_n = np.eye(2)
-# V_n = np.diag([0.0001, 0.037, 0.0000029]) # computed variance for MPU6050
+V_d = np.diag([3,3])
+# V_n = np.diag([0.03,0.000003]) # computed variance for MPU6050
+V_n = np.diag([0.05, 1]) 
 
-lqgBot.set_up_kalman_filter(C, V_d, V_n)
+
+# lqgBot.set_up_kalman_filter(C, V_d, V_n)
 
 lqrdBot = LQRDModel(state, 
                 RHS, 
@@ -115,7 +116,8 @@ lqgdBot = LQGDModel(state,
 lqgdBot.set_up_K(Q, R, goal_state, goal_u)
 lqgdBot.set_up_kalman_filter(C, V_d, V_n)
 
-
+lqgdBot.Kf = np.array([[0.2, 0.02], \
+                        [0.1, 1]])
 if __name__ == "__main__":
     # now we can rum a simulation
     u0 = np.array([0.0])
@@ -147,5 +149,15 @@ if __name__ == "__main__":
         A = [d[col] for d in run_data]
         sensor_data.append(A)
 
+    sensor_data = sensor_data[3:5]
+
+    # lqgdBot.Kf = np.array([[0.1, 0], \
+    #                         [0, 0.3]])
+
+    # lqgdBot.Kf = np.array([[0.3, 0.02], \
+    #                         [0.1, 1]])
+
+    
+    print(lqgdBot)
     filter_tuner = KalmanFilterTuner(lqgdBot, sensor_data)
     filter_tuner.run()

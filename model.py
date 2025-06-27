@@ -2,7 +2,27 @@ import casadi as ca
 import numpy as np
 from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr
 from abc import ABC, abstractmethod
-from utilities import van_loan_discretise_Q
+from scipy.linalg import expm
+
+def van_loan_discretise_Q(A, Qc, Ts, G=None):
+    n = A.shape[0]
+    if G is None:
+        G = np.eye(n)
+
+    # Build Van-Loan block matrix
+    M = np.block([
+        [ -A,           G @ Qc @ G.T ],
+        [ np.zeros_like(A),  A.T     ]
+    ]) * Ts
+
+    # Matrix exponential
+    Phi = expm(M)
+
+    # Extract blocks
+    Ad  = Phi[n:, n:].T          # (should equal expm(A*Ts))
+    Qd  = Ad @ Phi[:n, n:]       # lower-left block times Ad
+
+    return Qd
 
 # ____________________________________________________________________
 # 
@@ -292,6 +312,7 @@ class LQRDModel(LQRModel):
         self.B = sys_d.B
         self.K, S, E = dlqr(sys_d, self.Q, self.R)
 
+
     # ____________________________________________________________________
     #
     #  these are all the functions required by the ControlModel interface
@@ -364,4 +385,4 @@ class LQGDModel(LQRDModel):
     
     # Sensor fusion
     def sensor_fusion(self, x, y):
-        return self.Kf@(y - self.C@x) + x
+        return self.Kf@(y - self.C@x)

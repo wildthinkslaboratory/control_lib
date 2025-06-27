@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter
+from math import floor
 
 class Simulator:
     def __init__(self, model, x0, u0, timespan):
@@ -79,11 +80,13 @@ class Simulator:
 
 
 class NoisySimulator:
-    def __init__(self, model, x0, u0, timespan, noise = []):
+    def __init__(self, model, x0, u0, timespan, noise = np.array([]), nudge=False):
         self.model = model
         self.x0 = x0
         self.u0 = u0
         self.dt = model.dt
+        self.timespan = timespan
+        self.nudge = nudge
         self.tspan = np.arange(0,timespan,self.dt)
         self.true_data = np.empty([len(self.tspan),self.model.state_size()])
         self.sensor_data = np.empty([len(self.tspan),self.model.state_size()])
@@ -95,7 +98,7 @@ class NoisySimulator:
 
         self.num_measurements = self.C.shape[0]
         self.noise_var = noise
-        if noise == []:
+        if noise.any():
             self.noise_var = np.ones(self.num_measurements) * 0.001
         
 
@@ -110,6 +113,12 @@ class NoisySimulator:
 
         for i in range(len(self.tspan)):
 
+            if self.nudge == True and i == floor(( self.timespan / self.dt) / 2):
+                # nudge the system
+                x_true = self.model.next_state_no_kf(x_true, np.array([1.0]))
+                x_md = self.model.next_state(x_md, np.array([1.0]), y)
+
+
             # generate some noise
             for j, var in enumerate(self.noise_var):
                 noise[j] = np.random.normal(0.0,np.sqrt(var))
@@ -118,7 +127,8 @@ class NoisySimulator:
             # sensors are reading the true state plus some noise
             y = self.C @ x_true + noise 
             x_md = self.model.next_state(x_md,u,y)
-           
+
+
             # calculate where we really are if the sensors
             # were perfect
             x_true = self.model.next_state_no_kf(x_true, u)
@@ -139,11 +149,12 @@ class NoisySimulator:
         plt.rcParams.update({
         "text.usetex": True,
         })
-
+        
         ns = self.model.state_size()
         s_i = self.C @ [i for i in range(ns)]
         s_i = [int(i) for i in s_i]
         for i in s_i:
+            plt.figure(figsize=(12, 6)) 
             plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' true')
             plt.plot(self.tspan,self.sensor_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' sensors')
             plt.plot(self.tspan,self.md_data[:,i],linewidth=2,label=self.model.state_names()[i] + ' kf')
@@ -176,13 +187,15 @@ class KalmanFilterTuner:
         self.estimate_data[0] = x
 
         for i in range(1,len(self.tspan)):
-            x = self.model.sensor_fusion(x,y)
+            error = self.model.sensor_fusion(x,y)
+            # print('error', error, 'x', x, 'y', y)
+            x = error + x
             self.estimate_data[i] =  self.C @ x
             y = np.array([self.data[0][i], self.data[1][i]])
 
         for i in range(len(self.sensor_indices)):
-            plt.plot(self.tspan,self.estimate_data[:,i],linewidth=1,label=self.model.state_names()[i] + 'estimate')
             plt.plot(self.tspan,self.data[i],linewidth=2,label=self.model.state_names()[i] + ' sensor')
+            plt.plot(self.tspan,self.estimate_data[:,i],linewidth=1,label=self.model.state_names()[i] + 'estimate')
             plt.xlabel('Time')
             plt.ylabel('State')
             plt.title(self.model.model_name())

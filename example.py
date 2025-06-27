@@ -142,8 +142,8 @@ if __name__ == "__main__":
     # simulator = NoisySimulator(lqgBot, x0, u0, sim_length)
     # simulator.run()
 
-    # simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
-    # simulator.run()
+    simulator = NoisySimulator(lqgdBot, x0, u0, sim_length)
+    simulator.run()
 
     run_data = import_data('data.json')
     num_cols = len(run_data[0])
