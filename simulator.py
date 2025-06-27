@@ -80,17 +80,18 @@ class Simulator:
 
 
 class NoisySimulator:
-    def __init__(self, model, x0, u0, timespan, noise = np.array([]), nudge=False):
+    def __init__(self, model, x0, u0, timespan, noise = np.array([]), nudge=0.0):
         self.model = model
         self.x0 = x0
         self.u0 = u0
         self.dt = model.dt
         self.timespan = timespan
-        self.nudge = nudge
+        self.nudge = 0.0
         self.tspan = np.arange(0,timespan,self.dt)
         self.true_data = np.empty([len(self.tspan),self.model.state_size()])
         self.sensor_data = np.empty([len(self.tspan),self.model.state_size()])
         self.md_data = np.empty([len(self.tspan),self.model.state_size()])
+        self.u_data = np.empty([len(self.tspan),self.model.state_size()])
 
         self.C = np.eye(self.model.state_size())
         if self.model.has_kalman_filter():
@@ -113,9 +114,9 @@ class NoisySimulator:
 
         for i in range(len(self.tspan)):
 
-            if self.nudge == True and i == floor(( self.timespan / self.dt) / 2):
+            if ( not self.nudge == 0.0) and i == floor(( self.timespan / self.dt) / 2):
                 # nudge the system
-                x_true = self.model.next_state_no_kf(x_true, np.array([1.0]))
+                x_true = self.model.next_state_no_kf(x_true, np.array([self.nudge]))
                 x_md = self.model.next_state(x_md, np.array([1.0]), y)
 
 
@@ -142,6 +143,7 @@ class NoisySimulator:
             self.true_data[i] =  np.reshape(x_true, (num_states,))
             self.md_data[i] = np.reshape(x_md, (num_states,))
             self.sensor_data[i] = np.reshape(x_sensors, (num_states,))
+            self.u_data[i] = np.reshape(u, (self.model.input_size(),))
     
 
 
@@ -164,6 +166,14 @@ class NoisySimulator:
             plt.legend(loc='lower right')
             plt.show()
 
+        for i in range(self.model.input_size()):
+            plt.figure(figsize=(12, 6)) 
+            plt.plot(self.tspan,self.u_data[:,i],linewidth=1,label='u ' + str(i))
+            plt.xlabel('Time')
+            plt.ylabel('input')
+            plt.title(self.model.model_name())
+            plt.legend(loc='lower right')
+            plt.show()
 
 
 class KalmanFilterTuner:
