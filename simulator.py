@@ -86,7 +86,7 @@ class NoisySimulator:
         self.u0 = u0
         self.dt = model.dt
         self.timespan = timespan
-        self.nudge = 0.0
+        self.nudge = nudge
         self.tspan = np.arange(0,timespan,self.dt)
         self.true_data = np.empty([len(self.tspan),self.model.state_size()])
         self.sensor_data = np.empty([len(self.tspan),self.model.state_size()])
@@ -99,7 +99,7 @@ class NoisySimulator:
 
         self.num_measurements = self.C.shape[0]
         self.noise_var = noise
-        if noise.any():
+        if not noise.any():
             self.noise_var = np.ones(self.num_measurements) * 0.001
         
 
@@ -117,7 +117,7 @@ class NoisySimulator:
             if ( not self.nudge == 0.0) and i == floor(( self.timespan / self.dt) / 2):
                 # nudge the system
                 x_true = self.model.next_state_no_kf(x_true, np.array([self.nudge]))
-                x_md = self.model.next_state(x_md, np.array([1.0]), y)
+                x_md = self.model.next_state(x_md, np.array([self.nudge]), y)
 
 
             # generate some noise
@@ -138,7 +138,7 @@ class NoisySimulator:
             x_sensors = x_true + self.C.transpose() @ noise
 
             # get the control input based on our estimated state
-            u = self.model.control_input(x_true)
+            u = self.model.control_input(x_md)
 
             self.true_data[i] =  np.reshape(x_true, (num_states,))
             self.md_data[i] = np.reshape(x_md, (num_states,))
@@ -153,9 +153,9 @@ class NoisySimulator:
         })
         
         ns = self.model.state_size()
-        s_i = self.C @ [i for i in range(ns)]
-        s_i = [int(i) for i in s_i]
-        for i in s_i:
+        # s_i = self.C @ [i for i in range(ns)]
+        # s_i = [int(i) for i in s_i]
+        for i in range(ns):
             plt.figure(figsize=(12, 6)) 
             plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' true')
             plt.plot(self.tspan,self.sensor_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' sensors')

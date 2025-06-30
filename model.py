@@ -1,6 +1,6 @@
 import casadi as ca
 import numpy as np
-from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr
+from control.matlab import lqr, ctrb, obsv, ss, c2d, dlqr, dlqe
 from abc import ABC, abstractmethod
 from scipy.linalg import expm
 
@@ -97,6 +97,7 @@ class LQRModel(ControlModel):
         self.x_size = state.size1()
         self.u_size = u.size1()
         self.constant_values = constant_values
+
         if state_names == None:
             self.x_names = [s.name() for s in ca.vertsplit(state)]
         else:
@@ -358,16 +359,20 @@ class LQGDModel(LQRDModel):
     def set_up_kalman_filter(self, C, V_d, V_n):
         
         self.C = C         # C is our measurement model
-        self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise         
+        #self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise     
+        self.V_d = V_d    
         self.V_n = V_n      # measurement-noise 
-        self.Kf = dlqr(self.A.transpose(), self.C.transpose(), self.V_d, self.V_n)[0].transpose()
+        self.Kf , self.P, E = dlqe(self.A, np.eye(self.state_size()), self.C, self.V_d, self.V_n)
+
+        
 
     def __repr__(self):
         setup = ''
         if self.Kf.any():
             Kf = 'Kalman Filter: \n' + str(self.Kf)
             setup = f"\n{Kf}"
-
+            P = 'Expected state variance \n' + str(self.P)
+            setup += f"\n{P}"
         return 'LQGModel with Kalman filter \n' + super().__repr__() + setup    
 
     def next_state(self, x, u , y):
