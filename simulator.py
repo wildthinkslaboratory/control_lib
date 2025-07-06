@@ -93,6 +93,8 @@ class NoisySimulator:
         self.md_data = np.empty([len(self.tspan),self.model.state_size()])
         self.u_data = np.empty([len(self.tspan),self.model.state_size()])
 
+
+
         self.C = np.eye(self.model.state_size())
         if self.model.has_kalman_filter():
             self.C = self.model.C    
@@ -111,7 +113,7 @@ class NoisySimulator:
         noise = np.zeros(self.num_measurements)
         y = self.C@self.x0 
         num_states = self.model.state_size()
-
+        
         for i in range(len(self.tspan)):
 
             if ( not self.nudge == 0.0) and i == floor(( self.timespan / self.dt) / 2):
@@ -119,25 +121,23 @@ class NoisySimulator:
                 x_true = self.model.next_state_no_kf(x_true, np.array([self.nudge]))
                 x_md = self.model.next_state(x_md, np.array([self.nudge]), y)
 
-
             # generate some noise
             for j, var in enumerate(self.noise_var):
                 noise[j] = np.random.normal(0.0,np.sqrt(var))
-
-            # get the Kalman filter estimate 
-            # sensors are reading the true state plus some noise
-            y = self.C @ x_true + noise 
-            x_md = self.model.next_state(x_md,u,y)
-
 
             # calculate where we really are if the sensors
             # were perfect
             x_true = self.model.next_state_no_kf(x_true, u)
 
-            # sensor readings are the true state perturbed by some noise
+            # the state determined by sensors is the true state
+            # perturbed by noise in the sensors
             x_sensors = x_true + self.C.transpose() @ noise
 
-            # get the control input based on our estimated state
+            # get the Kalman filter estimate 
+            y = self.C @ x_sensors
+            x_md = self.model.next_state(x_md,u,y)
+
+            # get the control input based on our KF estimated state
             u = self.model.control_input(x_md)
 
             self.true_data[i] =  np.reshape(x_true, (num_states,))
@@ -153,8 +153,6 @@ class NoisySimulator:
         })
         
         ns = self.model.state_size()
-        # s_i = self.C @ [i for i in range(ns)]
-        # s_i = [int(i) for i in s_i]
         for i in range(ns):
             plt.figure(figsize=(12, 6)) 
             plt.plot(self.tspan,self.true_data[:,i],linewidth=1,label=self.model.state_names()[i] + ' true')
@@ -180,7 +178,7 @@ class KalmanFilterTuner:
     def __init__(self, model, data):
         self.model = model
         self.dt = self.model.dt
-        self.tspan = np.arange(0,len(data[0]) * self.dt, self.dt)
+        self.tspan = np.arange(0,len(data) * self.dt, self.dt)
         self.data = data
         self.C = self.model.C       
 
@@ -188,29 +186,40 @@ class KalmanFilterTuner:
         s_i = self.C @ [i for i in range(self.model.state_size())]
         self.sensor_indices = [int(i) for i in s_i]  
 
-        self.estimate_data = np.empty([len(self.tspan),len(self.sensor_indices)])
+        self.estimate_data = np.empty([len(self.tspan),self.model.state_size()])
 
     def run(self):
 
-        x = np.array([self.data[0][0], self.data[1][0]])
-        y = np.array([self.data[0][0], self.data[1][0]])
+        x = self.model.x_ref
+        y = self.data[0]
         self.estimate_data[0] = x
+        u = np.empty(len(self.tspan))
 
         for i in range(1,len(self.tspan)):
-            error = self.model.sensor_fusion(x,y)
-            # print('error', error, 'x', x, 'y', y)
-            x = error + x
-            self.estimate_data[i] =  self.C @ x
-            y = np.array([self.data[0][i], self.data[1][i]])
+            sensorD, modelD  = self.model.sensor_fusion(x,y)
+            x = sensorD + modelD + x
+            self.estimate_data[i] = x
+            u[i] = self.model.control_input(x)
+            y = self.data[i]
 
-        for i in range(len(self.sensor_indices)):
-            plt.plot(self.tspan,self.data[i],linewidth=2,label=self.model.state_names()[i] + ' sensor')
-            plt.plot(self.tspan,self.estimate_data[:,i],linewidth=1,label=self.model.state_names()[i] + 'estimate')
+        for i, s_i in enumerate(self.sensor_indices):
+            plt.figure(figsize=(12, 6)) 
+            plt.plot(self.tspan,self.data[:,i],linewidth=2,label=' sensor')
+            plt.plot(self.tspan,self.estimate_data[:,s_i],linewidth=1,label=self.model.state_names()[s_i] + 'estimate')
             plt.xlabel('Time')
             plt.ylabel('State')
             plt.title(self.model.model_name())
             plt.legend(loc='lower right')
             plt.show()
+
+        plt.figure(figsize=(12, 6)) 
+        plt.plot(self.tspan,u,linewidth=2,label='u')
+        plt.xlabel('Time')
+        plt.ylabel('Control Input')
+        plt.title(self.model.model_name())
+        plt.legend(loc='lower right')
+        plt.show()
+        
 
 class CascadedSimulator:
     def __init__(self, model, x0, u0, timespan):

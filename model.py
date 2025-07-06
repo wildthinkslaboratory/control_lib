@@ -268,19 +268,20 @@ class LQGModel(LQRModel):
     #  those not listed here are inherited fro LQRModel
     # ____________________________________________________________________
 
-    def next_state(self, x, u , y):
+    def next_state(self, x, u, y):
         dx = self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.Kf@(y - self.C@x)
         return x + dx*self.dt
 
     def has_kalman_filter(self):
         return True
+
+    # The next functions help with debugging and tuning a Kalman Filter
+    # It helps to seperate the model estimate from the sensor fusion
     
-    # # The next functions help with debugging and tuning a Kalman Filter
-    # # It helps to seperate the model estimate from the sensor fusion
-    
-    # # Model estimate
-    # def next_state_no_kf(self, x, u):
-    #     return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
+    # Model estimate
+    def next_state_no_kf(self, x, u):
+        dx = self.A@(x - self.x_ref) + self.B@(u - self.u_ref) 
+        return x + dx*self.dt
     
     # # Sensor fusion
     # def sensor_fusion(self, x, y):
@@ -319,8 +320,7 @@ class LQRDModel(LQRModel):
     #  these are all the functions required by the ControlModel interface
     #  those not listed here are inherited fro LQRModel
     # ____________________________________________________________________
-
-
+    
     def next_state(self, x, u ,y):
         return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
 
@@ -360,8 +360,8 @@ class LQGDModel(LQRDModel):
         
         self.C = C         # C is our measurement model
         #self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise     
-        self.V_d = V_d    
-        self.V_n = V_n      # measurement-noise 
+        self.V_d = V_d * self.dt 
+        self.V_n = V_n  / self.dt    # measurement-noise 
         self.Kf , self.P, E = dlqe(self.A, np.eye(self.state_size()), self.C, self.V_d, self.V_n)
 
         
@@ -390,4 +390,68 @@ class LQGDModel(LQRDModel):
     
     # Sensor fusion
     def sensor_fusion(self, x, y):
-        return self.Kf@(y - self.C@x)
+        return self.Kf@y, - self.Kf@self.C@x
+    
+
+class HybridModel(LQGModel):
+    def __init__(self, 
+                 state, 
+                 right_hand_side, 
+                 u, 
+                 constants, 
+                 constant_values, 
+                 dt,
+                 state_names = None,
+                 name='unnamed model'
+    ):
+        super().__init__(state, 
+                         right_hand_side, 
+                         u, 
+                         constants, 
+                         constant_values, 
+                         dt,
+                         state_names,
+                         name)
+        
+        # set up data structures for Kalman Filter
+        self.C = np.array([])
+        self.V_d = np.array([])
+        self.V_n = np.array([])
+        self.Kf = np.array([])
+        self.observable = False
+
+    def set_up_kalman_filter(self, C, V_d, V_n):
+        
+        self.C = C         # C is our measurement model
+        #self.V_d = van_loan_discretise_Q(self.A_c, V_d, self.dt) # process noise     
+        self.V_d = V_d * self.dt 
+        self.V_n = V_n  / self.dt    # measurement-noise 
+        self.Kf , self.P, E = dlqe(self.A, np.eye(self.state_size()), self.C, self.V_d, self.V_n)
+
+        
+
+    def __repr__(self):
+        setup = ''
+        if self.Kf.any():
+            Kf = 'Kalman Filter: \n' + str(self.Kf)
+            setup = f"\n{Kf}"
+            P = 'Expected state variance \n' + str(self.P)
+            setup += f"\n{P}"
+        return 'LQGModel with Kalman filter \n' + super().__repr__() + setup    
+
+    def next_state(self, x, u , y):
+        return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.Kf@(y - self.C@x) + self.x_ref
+
+    def has_kalman_filter(self):
+        return True   
+
+    # The next functions help with debugging and tuning a Kalman Filter
+    # It helps to seperate the model estimate from the sensor fusion
+    
+    # Model estimate
+    def next_state_no_kf(self, x, u):
+        return self.A@(x - self.x_ref) + self.B@(u - self.u_ref) + self.x_ref
+    
+    # Sensor fusion
+    def sensor_fusion(self, x, y):
+        return self.Kf@y, - self.Kf@self.C@x
