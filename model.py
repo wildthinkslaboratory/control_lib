@@ -79,6 +79,10 @@ class ControlModel(ABC):
     def has_kalman_filter(self):
         pass
 
+    @abstractmethod
+    def dictionary(self):
+        pass
+
 
 class LQRModel(ControlModel):
     def __init__(self, 
@@ -201,6 +205,12 @@ class LQRModel(ControlModel):
 
     def has_kalman_filter(self):
         return False
+    
+    def dictionary(self):
+        d = {}
+        d['name'] = self.name
+        d['type'] = type(self)
+        return d
 
 
 class LQGModel(LQRModel):
