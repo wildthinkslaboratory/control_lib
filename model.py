@@ -209,7 +209,7 @@ class LQRModel(ControlModel):
     def dictionary(self):
         d = {}
         d['name'] = self.name
-        d['type'] = type(self)
+        d['type'] = str(type(self))
         return d
 
 
